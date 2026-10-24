@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: Taller CRUD
+    orgId: 1
+    folder: Taller 4
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards
