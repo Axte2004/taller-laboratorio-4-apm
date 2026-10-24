@@ -1,0 +1,121 @@
+# Linux Codespaces fallback when Docker bridge traffic is blocked.
+name: taller-apm
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: crud
+      POSTGRES_USER: taller
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taller_local_only}
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U taller -d crud
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    cpus: 1.0
+    mem_limit: 512m
+    restart: unless-stopped
+    network_mode: host
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    environment:
+      DATA_SOURCE_NAME: postgresql://taller:${POSTGRES_PASSWORD:-taller_local_only}@127.0.0.1:5432/crud?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    cpus: 0.25
+    mem_limit: 128m
+    restart: unless-stopped
+    network_mode: host
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    cpus: 0.5
+    mem_limit: 512m
+    restart: unless-stopped
+    network_mode: host
+  app:
+    build: ./app
+    environment:
+      DATABASE_URL: postgresql+psycopg://taller:${POSTGRES_PASSWORD:-taller_local_only}@127.0.0.1:5432/crud
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
+      OTEL_SERVICE_NAME: taller-crud
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    depends_on:
+      db:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://localhost:8000/health',
+        timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    cpus: 1.0
+    mem_limit: 512m
+    restart: unless-stopped
+    network_mode: host
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.retention.time=7d
+    volumes:
+    - ./monitoring/prometheus.codespaces.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+    - app
+    cpus: 0.5
+    mem_limit: 512m
+    restart: unless-stopped
+    network_mode: host
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin_local_only}
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - ./monitoring/grafana/codespaces-provisioning:/etc/grafana/provisioning:ro
+    - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+    - prometheus
+    - jaeger
+    cpus: 0.5
+    mem_limit: 512m
+    restart: unless-stopped
+    network_mode: host
+  k6:
+    image: grafana/k6:0.54.0
+    profiles:
+    - load
+    volumes:
+    - ./load:/scripts:ro
+    environment:
+      BASE_URL: http://127.0.0.1:8000
+    depends_on:
+      app:
+        condition: service_healthy
+    network_mode: host
+  charts:
+    build: ./analysis
+    profiles:
+    - analysis
+    volumes:
+    - ./resultados:/workspace/resultados
+    network_mode: host
+volumes:
+  postgres_data: null
+  grafana_data: null
