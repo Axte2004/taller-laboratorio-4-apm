@@ -68,6 +68,10 @@ Esto conserva los volúmenes. Para borrar también los datos de PostgreSQL y Gra
 docker compose down -v
 ```
 
-## Entregables por completar
+## Resultados medidos
 
-`INFORME.md` contiene criterios previos, tabla de seis escalones, guion de análisis y lista de capturas. No incluye resultados inventados: complételos con una ejecución real en el equipo que describa. Adjunte capturas del panel de Grafana, `docker stats` y una traza de Jaeger. Genere las tres gráficas pedidas a partir de la tabla medida y responda las preguntas con esas evidencias.
+La prueba terminó con seis escalones de tres minutos y un minuto de calentamiento descartado. El último escalón que cumplió los criterios fijados antes de medir fue **50 usuarios virtuales**, con **180,22 peticiones/s**, **p95 de 300 ms** y **0 % de respuestas HTTP fallidas**. A 100 usuarios el p95 subió a 1.000 ms y el throughput dejó de crecer. La CPU de la API alcanzó el límite de un núcleo.
+
+En `resultados/` están el CSV completo, las muestras crudas, la salida de k6, una traza de Jaeger y las tres gráficas. El informe final en PDF y las capturas de pantalla se incluyen en el ZIP de entrega junto con este proyecto.
+
+Si no tiene Docker instalado, abra el proyecto en GitHub Codespaces y use `docker compose -f docker-compose.codespaces.yml up --build -d`. Para repetir la medición completa: `COMPOSE_FILE=docker-compose.codespaces.yml python analysis/run_experiment.py`.
